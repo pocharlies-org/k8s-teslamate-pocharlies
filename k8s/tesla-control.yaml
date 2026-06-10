@@ -1,0 +1,163 @@
+---
+# Tesla Fleet API control plane — migrated from docker-on-x86 2026-06-10
+# ("todo en k8s"): tesla-vehicle-proxy (signs vehicle commands with the Fleet
+# private key) + tesla-control-mcp (FastMCP bearer-auth'd HTTP API that talks
+# to the proxy with the OAuth tokens).
+#
+# Secrets are IMPERATIVE (created from the x86 originals, never in git):
+#   tesla-vehicle-proxy-config  fleet-key.pem + tls-{cert,key}.pem
+#   tesla-control-mcp-env       TESLA_CLIENT_ID/SECRET, TESLA_INITIAL_REFRESH_TOKEN,
+#                               TESLA_MCP_BEARER
+#   tesla-control-mcp-tokens    tokens.json seed (live refresh token state)
+# Improvement parked: source fleet-key via ExternalSecret from Vault
+# secret/infra/tesla/fleet-api (needs the Vault property name confirmed).
+#
+# The mcp talks to the proxy via the in-cluster Service name
+# `tesla-vehicle-proxy` — same hostname as the old docker network alias, and
+# the client uses verify=False (self-signed cert), so the cert CN is irrelevant.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tesla-vehicle-proxy
+  namespace: teslamate
+  labels: { app: tesla-vehicle-proxy }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: tesla-vehicle-proxy }
+  template:
+    metadata:
+      labels: { app: tesla-vehicle-proxy }
+    spec:
+      containers:
+        - name: proxy
+          # pinned to the digest that ran on x86 (tesla/vehicle-command:latest)
+          image: tesla/vehicle-command@sha256:e8adac679bf5e72790c588e620bb4a7992a8f80d4c3bd98da6d1129f59daf482
+          args:
+            - -tls-key
+            - /config/tls-key.pem
+            - -cert
+            - /config/tls-cert.pem
+            - -key-file
+            - /config/fleet-key.pem
+            - -host
+            - 0.0.0.0
+            - -port
+            - "4443"
+            - -verbose
+          ports:
+            - { containerPort: 4443, name: https }
+          readinessProbe:
+            tcpSocket: { port: 4443 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 4443 }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: config, mountPath: /config, readOnly: true }
+      volumes:
+        - name: config
+          secret:
+            secretName: tesla-vehicle-proxy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tesla-vehicle-proxy
+  namespace: teslamate
+  labels: { app: tesla-vehicle-proxy }
+spec:
+  selector: { app: tesla-vehicle-proxy }
+  ports:
+    - { name: https, port: 4443, targetPort: 4443 }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tesla-control-state
+  namespace: teslamate
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 1Gi } }
+  storageClassName: longhorn
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tesla-control-mcp
+  namespace: teslamate
+  labels: { app: tesla-control-mcp }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # RWO state PVC
+  selector:
+    matchLabels: { app: tesla-control-mcp }
+  template:
+    metadata:
+      labels: { app: tesla-control-mcp }
+    spec:
+      imagePullSecrets:
+        - name: harbor-pull
+      initContainers:
+        # seed tokens.json from the migrated docker-volume snapshot ONLY if the
+        # PVC is empty — after first run the live (rotating) token state wins.
+        - name: seed-tokens
+          image: busybox:1.36
+          command: ["sh", "-c", "[ -f /state/tokens.json ] || cp /seed/tokens.json /state/tokens.json"]
+          volumeMounts:
+            - { name: state, mountPath: /state }
+            - { name: seed, mountPath: /seed, readOnly: true }
+      containers:
+        - name: mcp
+          image: harbor.e-dani.com/homelab/tesla-control-mcp:20260610-1
+          env:
+            - { name: FLEET_API_URL, value: "https://fleet-api.prd.eu.vn.cloud.tesla.com" }
+            - { name: PROXY_URL, value: "https://tesla-vehicle-proxy:4443" }
+            - { name: STATE_FILE, value: "/state/tokens.json" }
+            - name: TESLA_CLIENT_ID
+              valueFrom: { secretKeyRef: { name: tesla-control-mcp-env, key: TESLA_CLIENT_ID } }
+            - name: TESLA_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: tesla-control-mcp-env, key: TESLA_CLIENT_SECRET } }
+            - name: TESLA_INITIAL_REFRESH_TOKEN
+              valueFrom: { secretKeyRef: { name: tesla-control-mcp-env, key: TESLA_INITIAL_REFRESH_TOKEN } }
+            - name: AUTH_TOKEN
+              valueFrom: { secretKeyRef: { name: tesla-control-mcp-env, key: TESLA_MCP_BEARER } }
+          ports:
+            - { containerPort: 8888, name: http }
+          readinessProbe:
+            tcpSocket: { port: 8888 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: state, mountPath: /state }
+      volumes:
+        - name: state
+          persistentVolumeClaim: { claimName: tesla-control-state }
+        - name: seed
+          secret: { secretName: tesla-control-mcp-tokens }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tesla-control-mcp
+  namespace: teslamate
+  labels: { app: tesla-control-mcp }
+spec:
+  selector: { app: tesla-control-mcp }
+  ports:
+    - { name: http, port: 8888, targetPort: 8888 }
