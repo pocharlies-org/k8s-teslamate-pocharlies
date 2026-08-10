@@ -132,7 +132,7 @@ spec:
             - { name: PGPASSWORD, valueFrom: { secretKeyRef: { name: teslamate-secrets, key: DB_PASSWORD } } }
       containers:
         - name: teslamate
-          image: teslamate/teslamate:3.0.0
+          image: teslamate/teslamate:4.0.1
           ports:
             - { name: http, containerPort: 4000 }
           env:
