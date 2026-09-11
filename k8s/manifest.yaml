@@ -21,9 +21,9 @@ metadata:
   name: teslamate-secrets
   namespace: teslamate
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: teslamate-secrets
@@ -31,7 +31,7 @@ spec:
     deletionPolicy: Retain
   dataFrom:
     - extract:
-        key: secret/teslamate
+        key: teslamate
 ---
 # ── Mosquitto MQTT broker ─────────────────────────────────────────────────────
 apiVersion: v1
@@ -211,21 +211,20 @@ metadata:
   name: teslamate-grafana-secrets
   namespace: teslamate-grafana
 spec:
-  refreshInterval: 1h
+  refreshInterval: 6h
   secretStoreRef:
-    name: vault-backend
+    name: onepassword
     kind: ClusterSecretStore
   target:
     name: teslamate-grafana-secrets
     # Merge into the pre-existing Secret so the manually seeded Grafana admin
-    # password is preserved until Vault write policy allows storing it there.
+    # password is preserved until 1Password write policy allows storing it there.
     creationPolicy: Merge
     deletionPolicy: Retain
   data:
     - secretKey: DB_PASS
       remoteRef:
-        key: secret/teslamate
-        property: DB_PASSWORD
+        key: teslamate/DB_PASSWORD
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
