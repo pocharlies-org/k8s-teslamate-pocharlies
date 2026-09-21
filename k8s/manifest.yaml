@@ -21,7 +21,7 @@ metadata:
   name: teslamate-secrets
   namespace: teslamate
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
@@ -211,7 +211,7 @@ metadata:
   name: teslamate-grafana-secrets
   namespace: teslamate-grafana
 spec:
-  refreshInterval: 6h
+  refreshInterval: 24h
   secretStoreRef:
     name: onepassword
     kind: ClusterSecretStore
