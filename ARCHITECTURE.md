@@ -15,7 +15,9 @@
 - **Depende de** — Postgres compartido (`postgres-shared`), API de Tesla (OAuth), init containers `busybox:1.36` y `postgres:16-alpine`, Harbor.
 - **Dependen de él** — `k8s-teslamate-mcp-pocharlies` (lee la BD), agentes que llaman a `tesla-control-mcp`; hosts `*.e-dani.com` en AdGuard.
 - **ArgoCD** `teslamate`: repo `pocharlies-org/k8s-teslamate-pocharlies`, path y sync según Application viva (tronco **`main`**, `origin/main` = 40a576d).
-  Nota: `k8s-tesla-pocharlies` (otro repo, sin Application) existe también; ver su doc.
+  **Solape**: `k8s/tesla-control.yaml` (namespace `teslamate`, imagen `tesla-control-mcp:20260610-1`, proxy por digest) es el despliegue **vivo** de
+  `tesla-control-mcp` y `tesla-vehicle-proxy`; `k8s-tesla-pocharlies` define los mismos servicios (y contiene su código y CI) pero sin Application. No desplegar ambos
+  (misma clave de flota, mismo refresh token rotatorio). Consolidación: ver §8 de su doc.
 
 ## 3. Stack
 
