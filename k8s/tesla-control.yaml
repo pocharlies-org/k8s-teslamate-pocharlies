@@ -48,11 +48,11 @@ spec:
           ports:
             - { containerPort: 4443, name: https }
           readinessProbe:
-            tcpSocket: { port: 4443 }
+            httpGet: { path: /health, port: 4443, scheme: HTTPS }
             initialDelaySeconds: 3
             periodSeconds: 10
           livenessProbe:
-            tcpSocket: { port: 4443 }
+            httpGet: { path: /health, port: 4443, scheme: HTTPS }
             initialDelaySeconds: 10
             periodSeconds: 30
           resources:
