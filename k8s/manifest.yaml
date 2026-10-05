@@ -148,6 +148,11 @@ spec:
             - { name: MQTT_HOST, value: "teslamate-mosquitto.teslamate.svc.cluster.local" }
             - { name: DISABLE_MQTT, value: "false" }
             - { name: TZ, value: "Europe/Madrid" }
+            # Fleet API (EU). TeslaMate v3.0.0 reads TESLA_API_HOST in lib/teslamate/http.ex and
+            # lib/tesla_api/vehicle.ex (default owner-api.teslamotors.com) and TESLA_AUTH_CLIENT_ID in
+            # lib/tesla_api/auth/refresh.ex; docs: website/docs/configuration/api.md. Tokens pasted in
+            # /sign_in must have been issued to that same client_id or the refresh fails.
+            - { name: TESLA_API_HOST, value: "https://fleet-api.prd.eu.vn.cloud.tesla.com" }
             - name: TESLA_AUTH_CLIENT_ID
               valueFrom: { secretKeyRef: { name: teslamate-secrets, key: TESLA_AUTH_CLIENT_ID, optional: true } }
             - name: TESLA_AUTH_CLIENT_SECRET
