@@ -204,6 +204,59 @@ spec:
   tls:
     store: { name: default, namespace: traefik-lan }
 ---
+# Public edge route (tm.e-dani.com, Cloudflare-proxied). Adopted from the
+# hand-applied copy in dgx-infra k8s/apps/edge/teslamate/ (INFRA-570): the
+# catch-all now carries sso-chain (Keycloak/oauth2-proxy, shared callback on
+# auth-next.e-dani.com, cookie .e-dani.com — same pattern as bambulab-public).
+# The two Tesla 3P routes (partner public key + OAuth callback page) stay
+# public and untouched: Tesla pulls the key from that exact path.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: teslamate-public
+  namespace: traefik-edge
+  labels:
+    app: teslamate
+    app.kubernetes.io/name: teslamate
+    app.kubernetes.io/part-of: dgx-infra
+  annotations:
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    external-dns.alpha.kubernetes.io/hostname: tm.e-dani.com
+    external-dns.alpha.kubernetes.io/target: 57.129.17.172
+spec:
+  entryPoints:
+    - websecure
+  ingressClassName: traefik-edge
+  routes:
+    - kind: Rule
+      match: Host(`tm.e-dani.com`) && Path(`/.well-known/appspecific/com.tesla.3p.public-key.pem`)
+      priority: 30
+      services:
+        - name: tesla-static
+          namespace: traefik-edge
+          port: 80
+    - kind: Rule
+      match: Host(`tm.e-dani.com`) && Path(`/sign_in/callback`)
+      priority: 30
+      services:
+        - name: tesla-static
+          namespace: traefik-edge
+          port: 80
+    # Everything else is the Teslamate UI: SSO-gated (INFRA-570, decision A).
+    - kind: Rule
+      match: Host(`tm.e-dani.com`)
+      priority: 10
+      middlewares:
+        - { name: sso-chain, namespace: keycloak }
+      services:
+        - name: teslamate
+          namespace: teslamate
+          port: 80
+  tls:
+    store:
+      name: default
+      namespace: traefik-edge
+---
 apiVersion: v1
 kind: Namespace
 metadata:
