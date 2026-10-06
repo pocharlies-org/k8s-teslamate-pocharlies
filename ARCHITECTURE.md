@@ -29,7 +29,7 @@
 
 ## 4. Componentes compartidos
 
-Postgres compartido (`k8s-infra-pocharlies/databases/postgres-shared`); IngressRoutes en `k8s-infra-pocharlies`.
+Postgres compartido (`k8s-infra-pocharlies/databases/postgres-shared`). IngressRoutes: `teslamate-lan` (LAN + SSO) y `teslamate-public` (catch-all de `tm.e-dani.com` tras `sso-chain`, INFRA-570) viven en `k8s/manifest.yaml` de este repo, sincronizados por el ArgoCD app `teslamate`; el servicio `tesla-static` al que apuntan las 2 rutas Tesla sigue aplicado a mano (copia en `dgx-infra/k8s/apps/edge/teslamate/`).
 
 ## 5. Cómo se construye aquí
 
@@ -69,7 +69,7 @@ Sin tests; `kustomize build k8s` lo ejecuta el CI estándar.
    `tesla-vehicle-proxy-config` (`fleet-key.pem`, `tls-cert.pem`, `tls-key.pem`), `tesla-control-mcp-env` (`TESLA_CLIENT_ID/SECRET`,
    `TESLA_INITIAL_REFRESH_TOKEN`, `TESLA_MCP_BEARER`), `tesla-control-mcp-tokens` (`tokens.json`). Lo que viene de ExternalSecret es solo `teslamate-secrets`.
    **No compartir el refresh token** entre TeslaMate y `tesla-control-mcp`: el refresh rota y se invalidarían mutuamente. Cada uno lleva el suyo.
-   Las rutas públicas de `tm.e-dani.com` (clave pública Tesla y `/sign_in/callback`, dominio partner) no se tocan al reautenticar.
+   Las rutas públicas de `tm.e-dani.com` (clave pública Tesla y `/sign_in/callback`, dominio partner) no se tocan al reautenticar, y siguen públicas tras INFRA-570: solo la catch-all (la UI) quedó detrás de `sso-chain`.
 5. **Verificar** (comando de C1, INFRA-488):
    `export KUBECONFIG=~/.kube/config; kubectl -n databases exec postgres-shared-2 -c postgres -- env PGHOST=/controller/run psql -U postgres -d teslamate -tAc "select now() - max(date) < interval '15 minutes' from positions"` → `t`.
    Con el coche dormido: `max(date)` posterior a la reautenticación y `kubectl -n teslamate logs deploy/teslamate --since=1h | grep -c -i "fleet-api"` ≥ 1.
